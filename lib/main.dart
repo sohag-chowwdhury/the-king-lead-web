@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -9,15 +8,17 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+const loginEmail = 'admin@king.com';
+const loginPassword = 'King@20002';
 const sessionLength = Duration(days: 7);
-final secureFunctions = FirebaseFunctions.instanceFor(region: 'asia-south1');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-            apiKey: 'AIzaSyC2PxVcoj8IsbRJ754GI-uPGU6t3L0bnqI',
-            appId: '1:901945590076:web:15057e8dc9694579761e39',
+      apiKey: 'AIzaSyC2PxVcoj8IsbRJ754GI-uPGU6t3L0bnqI',
+      appId: '1:901945590076:web:15057e8dc9694579761e39',
+      authDomain: 'the-king-ebce5.firebaseapp.com',
       messagingSenderId: '901945590076',
       projectId: 'the-king-ebce5',
       storageBucket: 'the-king-ebce5.firebasestorage.app',
@@ -34,9 +35,29 @@ CollectionReference<Map<String, dynamic>> collection(String name) =>
         .doc(FirebaseAuth.instance.currentUser!.uid)
         .collection(name);
 
+Future<void> ensureAuth() async {
+  if (FirebaseAuth.instance.currentUser != null) return;
+  try {
+    await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: loginEmail,
+      password: loginPassword,
+    );
+  } on FirebaseAuthException catch (error) {
+    if (error.code == 'user-not-found' || error.code == 'invalid-credential') {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: loginEmail,
+        password: loginPassword,
+      );
+    } else {
+      rethrow;
+    }
+  }
+}
+
 class AppUser {
   final String id;
   final String name;
+  final String pin;
   final String role;
   final bool active;
   final int sessionVersion;
@@ -44,6 +65,7 @@ class AppUser {
   const AppUser(
     this.id,
     this.name,
+    this.pin,
     this.role, {
     this.active = true,
     this.sessionVersion = 0,
@@ -56,6 +78,7 @@ class AppUser {
     return AppUser(
       doc.id,
       data['name'] ?? 'জানা নাই',
+      data['pin'] ?? '',
       data['role'] ?? 'staff',
       active: data['active'] ?? true,
       sessionVersion: data['sessionVersion'] ?? 0,
@@ -63,8 +86,12 @@ class AppUser {
   }
 }
 
+const superAdmins = [
+  AppUser('admin_sohag', 'Sohag', '20002', 'superadmin'),
+  AppUser('admin_azizul', 'Azizul', '20002', 'superadmin'),
+];
+
 final signedInUser = ValueNotifier<AppUser?>(null);
-final availableUsers = ValueNotifier<List<AppUser>>([]);
 
 Future<void> saveSession(AppUser user) async {
   final prefs = await SharedPreferences.getInstance();
@@ -74,7 +101,6 @@ Future<void> saveSession(AppUser user) async {
 }
 
 Future<void> logout() async {
-  await FirebaseAuth.instance.signOut();
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove('kingUser');
   await prefs.remove('kingLoginAt');
@@ -122,8 +148,8 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final pin = TextEditingController();
-  List<AppUser> users = [];
-  String? selectedId;
+  List<AppUser> users = [...superAdmins];
+  String selectedId = superAdmins.first.id;
   bool loading = true;
 
   @override
@@ -134,36 +160,16 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> load() async {
     try {
-      final response = await secureFunctions
-          .httpsCallable('listAppUsers')
-          .call<Map<String, dynamic>>();
-      final rawUsers = List<Map<String, dynamic>>.from(
-          (response.data['users'] as List).map((item) => Map<String, dynamic>.from(item)));
-      users = rawUsers
-          .map((data) => AppUser(
-                data['id'],
-                data['name'] ?? 'জানা নাই',
-                data['role'] ?? 'staff',
-                active: data['active'] ?? true,
-                sessionVersion: data['sessionVersion'] ?? 0,
-              ))
-          .toList();
-      availableUsers.value = users;
-      final activeUsers = users.where((user) => user.active);
-      selectedId = activeUsers.isEmpty ? null : activeUsers.first.id;
+      await ensureAuth();
+      final snapshot = await collection('staff').get();
+      users = [...superAdmins, ...snapshot.docs.map(AppUser.fromDoc)];
       final prefs = await SharedPreferences.getInstance();
       final savedId = prefs.getString('kingUser');
       final loginAt = prefs.getInt('kingLoginAt') ?? 0;
       final savedVersion = prefs.getInt('kingSessionVersion') ?? -1;
       final validTime = DateTime.now().millisecondsSinceEpoch - loginAt <
           sessionLength.inMilliseconds;
-      final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (savedId != null && validTime && firebaseUser != null) {
-        final token = await firebaseUser.getIdTokenResult(true);
-        if (token.claims?['appUserId'] != savedId) {
-          await logout();
-          return;
-        }
+      if (savedId != null && validTime) {
         final match = users.where((user) => user.id == savedId);
         if (match.isNotEmpty) {
           final user = match.first;
@@ -181,36 +187,18 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> enter() async {
-    if (selectedId == null || pin.text.trim().isEmpty) return;
+  void enter() {
     final user = users.firstWhere((item) => item.id == selectedId);
     if (!user.active) {
       toast(context, 'এই User Block করা আছে');
       return;
     }
-    setState(() => loading = true);
-    try {
-      final response = await secureFunctions
-          .httpsCallable('loginWithPin')
-          .call<Map<String, dynamic>>({
-        'userId': user.id,
-        'pin': pin.text.trim(),
-      });
-      await FirebaseAuth.instance.signInWithCustomToken(response.data['token']);
-      final securedUser = AppUser(
-        response.data['user']['id'],
-        response.data['user']['name'],
-        response.data['user']['role'],
-        active: true,
-        sessionVersion: response.data['user']['sessionVersion'] ?? 0,
-      );
-      signedInUser.value = securedUser;
-      await saveSession(securedUser);
-    } on FirebaseFunctionsException catch (error) {
-      if (mounted) toast(context, error.message ?? 'PIN সঠিক নয়');
-    } finally {
-      if (mounted) setState(() => loading = false);
+    if (pin.text.trim() != user.pin) {
+      toast(context, 'PIN সঠিক নয়');
+      return;
     }
+    signedInUser.value = user;
+    saveSession(user);
   }
 
   @override
@@ -246,7 +234,8 @@ class _LoginPageState extends State<LoginPage> {
                                     '${user.name} • ${user.isAdmin ? 'Super Admin' : 'Staff'}'),
                               ))
                           .toList(),
-                      onChanged: (value) => setState(() => selectedId = value),
+                      onChanged: (value) =>
+                          setState(() => selectedId = value!),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -1078,7 +1067,8 @@ class _LeadFormPageState extends State<LeadFormPage> {
   }
 
   Future<void> loadOptions() async {
-    staff = availableUsers.value.where((item) => item.active).toList();
+    final staffSnap = await collection('staff').where('active', isEqualTo: true).get();
+    staff = [...superAdmins, ...staffSnap.docs.map(AppUser.fromDoc)];
     sources = await activeOptionNames(
         'lead_sources', ['TikTok', 'Facebook', 'Direct', 'অন্যান্য']);
     topics = await activeOptionNames(
@@ -1457,14 +1447,10 @@ class _OptionSettingsState extends State<OptionSettings> {
 class UserSettings extends StatelessWidget {
   const UserSettings({super.key});
 
-  Future<void> adminCall(String name, Map<String, dynamic> data) async {
-    await secureFunctions.httpsCallable(name).call(data);
-  }
-
   Future<void> userDialog(BuildContext context,
       [DocumentSnapshot<Map<String, dynamic>>? doc]) async {
     final name = TextEditingController(text: doc?.data()?['name']);
-    final pin = TextEditingController();
+    final pin = TextEditingController(text: doc?.data()?['pin']);
     final accepted = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
@@ -1496,18 +1482,24 @@ class UserSettings extends StatelessWidget {
           ),
         ) ??
         false;
-    final pinValue = pin.text.trim();
-    if (!accepted ||
-        name.text.trim().isEmpty ||
-        (doc == null && pinValue.length < 4) ||
-        (pinValue.isNotEmpty && pinValue.length < 4)) {
+    if (!accepted || name.text.trim().isEmpty || pin.text.trim().length < 4) {
       return;
     }
-    await adminCall('upsertStaff', {
-      if (doc != null) 'staffId': doc.id,
-      'name': name.text.trim(),
-      if (pinValue.isNotEmpty) 'pin': pinValue,
-    });
+    if (doc == null) {
+      await collection('staff').add({
+        'name': name.text.trim(),
+        'pin': pin.text.trim(),
+        'role': 'staff',
+        'active': true,
+        'sessionVersion': 0,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await doc.reference.update({
+        'name': name.text.trim(),
+        'pin': pin.text.trim(),
+      });
+    }
   }
 
   Future<void> resetPin(
@@ -1536,24 +1528,24 @@ class UserSettings extends StatelessWidget {
         ) ??
         false;
     if (!accepted || controller.text.trim().length < 4) return;
-    await adminCall('resetStaffPin', {
-      'staffId': doc.id,
+    await doc.reference.update({
       'pin': controller.text.trim(),
+      'sessionVersion': FieldValue.increment(1),
     });
     if (context.mounted) toast(context, 'PIN Reset ও Session বাতিল হয়েছে');
   }
 
   Future<void> forceLogout(
       BuildContext context, DocumentSnapshot<Map<String, dynamic>> doc) async {
-    await adminCall('forceStaffLogout', {'staffId': doc.id});
+    await doc.reference.update({'sessionVersion': FieldValue.increment(1)});
     if (context.mounted) toast(context, 'User Force Logout হয়েছে');
   }
 
   Future<void> setBlocked(DocumentSnapshot<Map<String, dynamic>> doc,
       bool currentlyActive) async {
-    await adminCall('setStaffActive', {
-      'staffId': doc.id,
+    await doc.reference.update({
       'active': !currentlyActive,
+      'sessionVersion': FieldValue.increment(1),
     });
   }
 
