@@ -16,6 +16,7 @@ jobs:
           unzip -o the-king-lead-web-source.zip
           rm the-king-lead-web-source.zip
           rm .github/workflows/bootstrap.yml
+          rm .github/workflows/deploy-web.yml
       - name: Commit source
         run: |
           git config user.name github-actions[bot]
