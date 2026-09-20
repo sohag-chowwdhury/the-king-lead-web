@@ -1,0 +1,15 @@
+{
+  "name": "The King Lead",
+  "short_name": "King Lead",
+  "description": "Lead follow-up and management for The King International Services.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#05070b",
+  "theme_color": "#05070b",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity"],
+  "icons": [{"src":"icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

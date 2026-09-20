@@ -1,0 +1,44 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIntoTenant(userId) {
+      return request.auth != null
+             && request.auth.uid == userId
+             && request.auth.token.appUserId is string;
+    }
+
+    function isAdmin(userId) {
+      return signedIntoTenant(userId)
+             && request.auth.token.role == 'superadmin';
+    }
+
+    function activeStaff(userId) {
+      return isAdmin(userId) || (
+        signedIntoTenant(userId)
+        && exists(/databases/$(database)/documents/users/$(userId)/staff/$(request.auth.token.appUserId))
+        && get(/databases/$(database)/documents/users/$(userId)/staff/$(request.auth.token.appUserId)).data.active == true
+        && get(/databases/$(database)/documents/users/$(userId)/staff/$(request.auth.token.appUserId)).data.sessionVersion == request.auth.token.sessionVersion
+      );
+    }
+
+    match /users/{userId}/leads/{leadId} {
+      allow read, create, update: if activeStaff(userId);
+      allow delete: if isAdmin(userId);
+    }
+
+    match /users/{userId}/staff/{staffId} {
+      allow read: if isAdmin(userId)
+                  || (activeStaff(userId)
+                      && request.auth.token.appUserId == staffId);
+      allow write: if false;
+    }
+
+    match /users/{userId}/{settingsCollection}/{documentId} {
+      allow read: if activeStaff(userId)
+                  && settingsCollection in ['lead_sources', 'interest_topics', 'brokers'];
+      allow write: if isAdmin(userId)
+                   && settingsCollection in ['lead_sources', 'interest_topics', 'brokers'];
+    }
+  }
+}

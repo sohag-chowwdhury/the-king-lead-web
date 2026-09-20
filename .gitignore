@@ -1,0 +1,11 @@
+.dart_tool/
+.firebase/
+.idea/
+.sites-runtime/
+.vscode/
+build/
+functions/node_modules/
+functions/.env
+functions/.runtimeconfig.json
+firebase-debug.log
+flutter_*.png

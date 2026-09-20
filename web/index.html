@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="The King Lead — secure lead follow-up and management.">
+  <meta name="theme-color" content="#05070b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="The King Lead">
+  <meta name="format-detection" content="telephone=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <title>The King Lead</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;background:#05070b}
+    #install-app{position:fixed;right:16px;top:max(16px,env(safe-area-inset-top));z-index:99999;border:1px solid #38bdf8;background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border-radius:999px;padding:11px 16px;font:700 14px system-ui,-apple-system,sans-serif;box-shadow:0 10px 30px #0284c755;cursor:pointer}
+    #install-app[hidden]{display:none}
+    #install-sheet{position:fixed;inset:0;z-index:100000;background:#020617cc;display:none;align-items:flex-end;justify-content:center;padding:18px}
+    #install-sheet.open{display:flex}
+    .sheet{width:min(100%,460px);background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:24px;padding:22px;font:16px/1.55 system-ui,-apple-system,sans-serif;box-shadow:0 24px 80px #0009}
+    .sheet h2{margin:0 0 10px;color:#fff;font-size:22px}.sheet ol{padding-left:22px}.sheet strong{color:#38bdf8}.sheet button{width:100%;border:0;border-radius:14px;background:#1e293b;color:white;padding:13px;font-weight:700}
+  </style>
+</head>
+<body>
+  <button id="install-app" type="button">＋ Install App</button>
+  <div id="install-sheet" role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div class="sheet">
+      <h2 id="install-title">Home Screen-এ যোগ করুন</h2>
+      <div id="ios-guide">
+        <ol>
+          <li>Safari-এর নিচে <strong>Share</strong> আইকনে চাপুন।</li>
+          <li><strong>Add to Home Screen</strong> নির্বাচন করুন।</li>
+          <li>উপরে <strong>Add</strong> চাপুন।</li>
+        </ol>
+        <p>এরপর The King Lead icon থেকে app-এর মতো খুলবে।</p>
+      </div>
+      <div id="generic-guide" hidden>
+        Browser menu খুলে <strong>Install app</strong> অথবা <strong>Add to Home screen</strong> নির্বাচন করুন।
+      </div>
+      <button id="close-sheet" type="button">ঠিক আছে</button>
+    </div>
+  </div>
+  <script>
+    let deferredInstallPrompt = null;
+    const installButton = document.getElementById('install-app');
+    const sheet = document.getElementById('install-sheet');
+    const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (isStandalone) installButton.hidden = true;
+    addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      installButton.hidden = false;
+    });
+    installButton.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        return;
+      }
+      document.getElementById('ios-guide').hidden = !isIOS;
+      document.getElementById('generic-guide').hidden = isIOS;
+      sheet.classList.add('open');
+    });
+    document.getElementById('close-sheet').addEventListener('click', () => sheet.classList.remove('open'));
+    sheet.addEventListener('click', (event) => { if (event.target === sheet) sheet.classList.remove('open'); });
+    addEventListener('appinstalled', () => { installButton.hidden = true; deferredInstallPrompt = null; });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
