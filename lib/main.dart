@@ -16,8 +16,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-      apiKey: 'AIzaSyBhAD9p4TbXZUHd-6_cd75kCQh4yZNfUyw',
-      appId: '1:901945590076:android:3694d5babea31c05761e39',
+            apiKey: 'AIzaSyC2PxVcoj8IsbRJ754GI-uPGU6t3L0bnqI',
+            appId: '1:901945590076:web:15057e8dc9694579761e39',
       messagingSenderId: '901945590076',
       projectId: 'the-king-ebce5',
       storageBucket: 'the-king-ebce5.firebasestorage.app',
